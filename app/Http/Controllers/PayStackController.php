@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Branch;
 use App\Models\Pharmacy;
+use App\Models\Plan;
 use App\Models\Subscription;
 use App\Models\User;
 use Carbon\Carbon;
@@ -49,7 +50,9 @@ class PayStackController extends Controller
                     ],
                 ]);
 
-                if ( $req['subscription_name'] === 'trial'){
+                $plan = Plan::where('id',$req['plan_id'])->first();
+
+                if ( $plan->plan_name === 'trial'){
                     $pharmacyPayload =  [
                         'pharmacy_name' => $req['pharmacy_name'],
                         'reg_ID' => $req['reg_ID'],
@@ -57,7 +60,10 @@ class PayStackController extends Controller
                         'email' => $req['pharmacy_email'],
                         'PIMA_ID' => Str::random(7),
                         'subscription_date' =>  now()->addDays(15) ,
-                        'subscription_name' => $req['subscription_name'],
+                        'subscription_name' => $plan->plan_name,
+                        'plan_id' => $req['plan_id'],
+                        'subscription_amount' => $plan->plan_amount,
+
                     ];
 
 
@@ -84,7 +90,10 @@ class PayStackController extends Controller
                         'phone_no'=> $req['user_phone_no'],
                         'branch_id'=> $branch->id,
                         'address' => $req['user_address'],
-                        'date_of_birth' => $req['dateOfBirth']
+                        'date_of_birth' => $req['dateOfBirth'],
+                        'license_no' => $req['reg_ID'],
+                        'specialization' => 'pharmacy',
+
 
 
                     ];
@@ -92,18 +101,37 @@ class PayStackController extends Controller
 
                     $admin = User::create($payload);
 
+                    $subscriptionPayload = [
+                        'pharmacy_id' => $pharmacy->id,
+                        'subscription_name' => $plan->plan_name,
+                        'amount' =>   $plan->plan_amount,
+                        'duration' => $plan->duration,
+                        'expiring_date'=> $pharmacy->subscription_date,
+                        'plan_id' => $req['plan_id']
+
+                    ];
+
+                    $subsription = Subscription::create($subscriptionPayload);
+
+
+
+                    return redirect(env('FRONT_END_URL')."/onboarding?pharmacy_regID=$pharmacy->reg_ID&pharmacy_id=$pharmacy->id&plan_id={$plan->id}&message=success");
+
+
                     return response()->json(['message'=>'Your Free SignUp has been Activated','data'=> $pharmacy],200);
                 }
 
-                $enrollmentPaymentInit = HTTP::withToken(env('PAYSTACK_SECRETE_KEY'))
+
+
+                $enrollmentPaymentInit = HTTP::withToken(env('PAYSTACK_SECRET_KEY'))
                     ->post("https://api.paystack.co/transaction/initialize",[
                         'email' => $req['pharmacy_email'],
-                        'amount' => $req['amount'] *100,
-                        'callback_url' => url("/api/enrollmentPaymentCallback?pharmacy_name={$req['pharmacy_name']}&reg_ID={$request['reg_ID']
-                        }&phone_no={$request['phone_no']}&email={$request['email']}&PIMA_ID={$request['PIMA_ID']}&subscription_date={$request['subscription_date']
-                        }&subscription_name={$request['subscription_name']}&branch_name={$request['branch_name']}&branch_address={$request['branch_address']
+                        'amount' => $plan['plan_amount'] *100,
+                        'callback_url' => url("/api/enrollmentPaymentCallback?plan_id={$req['plan_id']}&pharmacy_name={$req['pharmacy_name']}&reg_ID={$request['reg_ID']
+                        }&pharmacy_phone_no={$request['pharmacy_phone_no']}&pharmacy_email={$request['pharmacy_email']}&subscription_date={$plan['duration']
+                        }&subscription_name={$plan['plan_name']}&branch_phone_no={$req['branch_phone_no']}&branch_name={$request['branch_name']}&branch_address={$request['branch_address']
                         }&user_name={$request['user_name']}&user_email={$request['user_email']}&password={$request['password']}&user_phone_no={$request['user_phone_no']
-                        }&user_address={$request['user_address']}&dateOfBirth={$request['dateOfBirth']}&amount={$request['amount']}")
+                        }&user_address={$request['user_address']}&dateOfBirth={$request['dateOfBirth']}&amount={$plan['plan_amount']}")
                     ]);
 
 
@@ -115,26 +143,38 @@ class PayStackController extends Controller
     }
 
 
-    public function intializeSubscriptionPayment (Request $request){
+    public function initializeSubscriptionPayment (Request $request){
 
             $req = $request->all();
 
             try {
 
-                $pharmacy = Pharmacy::where('id',$req['pharmacy_id'])->first();
+                $pharmacy = Pharmacy::with(['plan','users','branch'])->where('id',$req['pharmacy_id'])->first();
 
                 if (!$pharmacy){
                     return response()->json(['message'=>'Pharmacy record not found'],200);
 
                 }
 
+
+                $plan = Plan::where('id',$req['plan_id'])->first();
+
+                if (($pharmacy->branch->count()+1) > $plan->max_branch){
+                    return response()->json(['message'=>'Your Business has outgrown this Plan, Please upgrade to the next Plan'],200);
+                }
+                if (($pharmacy->users->count() + 1) > $plan->max_user){
+                    return response()->json(['message'=>'Your Staff record has outgrown this Plan, Please upgrade to the next Plan'],200);
+                }
+
+
                 /*todo fetch the user email and password and check for authentication before initializing payment*/
 
                 $initalizeSubscriptionPayment = Http::withToken(env('PAYSTACK_SECRET_KEY'))
                     ->post("https://api.paystack.co/transaction/initialize",[
                         'email' => $pharmacy->email,
-                        'amount' => $req['amount'] *100,
-                        'callback_url' => url("/api/subscriptionPaymentCallback?pharmacy_id={$pharmacy->id}&subscription_date={$request['subscription_date']}&subscription_name={$request['subscription_name']}&amount={$request['amount']}")
+                       /* 'amount' => $req['amount'] *100,*/
+                        'amount' => $plan->plan_amount *100,
+                        'callback_url' => url("/api/subscriptionPaymentCallback?pharmacy_id={$pharmacy->id}&subscription_date={$plan->duration}&subscription_name={$plan->plan_name}&amount={$plan->plan_amount}&plan_id={$plan->id}")
                     ]);
 
 
@@ -150,7 +190,9 @@ class PayStackController extends Controller
 
             $req = $request->all();
 
-            try {
+
+        try {
+
 
                 return DB::transaction(function ()use($req,$request){
                     $confirmPayment = Http::withToken(env("PAYSTACK_SECRET_KEY"))
@@ -160,6 +202,7 @@ class PayStackController extends Controller
 
                     if ( $confirmPayment['data']['status'] === 'success') {
 
+                        $planID = $req['plan_id'];
                         $isTrial = $req['subscription_name'] === 'trial';
 
 
@@ -170,8 +213,10 @@ class PayStackController extends Controller
                             'phone_no' => $req['pharmacy_phone_no'],
                             'email' => $req['pharmacy_email'],
                             'PIMA_ID' => Str::random(7),
-                            'subscription_date' => $isTrial ? now()->addDays(15) : now()->addMonths($req['subscription_date']),
+                            'subscription_date' => $isTrial ? now()->addDays(15) : now()->addMonths((int)$req['subscription_date']),
                             'subscription_name' => $req['subscription_name'],
+                            'subscription_amount' => $req['amount'],
+                            'plan_id' => $planID,
                         ];
 
 
@@ -198,7 +243,9 @@ class PayStackController extends Controller
                             'phone_no'=> $req['user_phone_no'],
                             'branch_id'=> $branch->id,
                             'address' => $req['user_address'],
-                            'date_of_birth' => $req['dateOfBirth']
+                            'date_of_birth' => $req['dateOfBirth'],
+                            'license_no' => $req['reg_ID'],
+                            'specialization' => 'pharmacy',
 
 
                         ];
@@ -212,8 +259,10 @@ class PayStackController extends Controller
                           'pharmacy_id' => $pharmacy->id,
                           'subscription_name' => $req['subscription_name'],
                           'amount' =>   $req['amount'],
-                          'duration' => $req['duration'],
+                          'duration' => $req['subscription_date'],
                             'expiring_date'=> $pharmacy->subscription_date,
+                            'plan_id' => $req['plan_id']
+
                         ];
 
                         $subsription = Subscription::create($subscriptionPayload);
@@ -222,10 +271,14 @@ class PayStackController extends Controller
 
 
 
+                        return redirect(env('FRONT_END_URL')."/onboarding?pharmacy_regID=$pharmacy->reg_ID&pharmacy_id=$pharmacy->id&plan_id=$planID&message=success");
+
+
                         return response()->json(['message'=>'','data'=> ['admin'=>$admin,'branch'=>$branch,'pharmacy'=>$pharmacy],'subscription'=>$subsription],200);
 
 
                     }  else{
+                        return redirect(env('FRONT_END_URL')."/onboarding?pharmacy_regID={$req['reg_ID']}&message=failed");
 
                         /*todo redirect*/
                         return response()->json(['message'=>'Subscription Failed'],200);
@@ -246,7 +299,9 @@ class PayStackController extends Controller
             $req = $request->all();
 
             try {
-                DB::transaction(function ()use($req,$request){
+                return DB::transaction(function ()use($req,$request){
+
+                    $planID = $req['plan_id'];
                     $pharmacy = Pharmacy::where('id',$req['pharmacy_id'])->first();
 
                     /*if (!$pharmacy){
@@ -263,15 +318,21 @@ class PayStackController extends Controller
 
                         if ($pharmacy->subscription_date < now()){
                             $pharmacy->update([
-                                'subscription_date' => now()->addMonths($req['subscription']),
-                                'subscription_name' => $req['subscription_name']
+                                'subscription_date' => now()->addMonths((int)$req['subscription_date']),
+                                'subscription_name' => $req['subscription_name'],
+                                'subscription_amount' => $req['amount'],
+                                'plan_id' => $req['plan_id']
                             ]);
                         }else{
                             $pharmacy->update([
-                                'subscription_date' => Carbon::parse($pharmacy->subscription_date)->addMonths($req['subscription']),
-                                'subscription_name' => $req['subscription_name']
+                                'subscription_date' => Carbon::parse($pharmacy->subscription_date)->addMonths((int)$req['subscription_date']),
+                                'subscription_name' => $req['subscription_name'],
+                                'subscription_amount' => $req['amount'],
+                                'plan_id' => $req['plan_id']
                             ]);
                         }
+
+
 
                         $pharmacy->refresh();
 
@@ -281,7 +342,8 @@ class PayStackController extends Controller
                             'pharmacy_id' => $pharmacy->id,
                             'subscription_name' => $req['subscription_name'],
                             'amount' =>   $req['amount'],
-                            'duration' => $req['duration'],
+                            'duration' => $req['subscription_date'],
+                            'plan_id' => $req['plan_id'],
                             'expiring_date'=> $pharmacy->subscription_date,
                         ];
 
@@ -290,15 +352,18 @@ class PayStackController extends Controller
 
 
 
-                        /*todo: redirect*/
 
-                        return response()->json(['message'=>'Subscription Successful','data'=> ['pharmacy'=> $pharmacy, 'subscription'=> $subscription]],200);
+
+                        return redirect(env('FRONT_END_URL')."/subscription?pharmacy_regID=$pharmacy->reg_ID&pharmacy_id=$pharmacy->id&plan_id=$planID&message=success");
+
+                        /*return response()->json(['message'=>'Subscription Successful','data'=> ['pharmacy'=> $pharmacy, 'subscription'=> $subscription]],200);*/
 
                     }
                     else{
+                        return redirect(env('FRONT_END_URL')."/subscription?pharmacy_regID=$pharmacy->reg_ID&pharmacy_id=$pharmacy->id&message=failed");
 
                         /*todo redirect*/
-                        return response()->json(['message'=>'Subscription Failed'],200);
+                        /*return response()->json(['message'=>'Subscription Failed'],200);*/
 
                     }
                 });

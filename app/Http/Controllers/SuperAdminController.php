@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Branch;
 use App\Models\Pharmacy;
+use App\Models\Plan;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -23,11 +24,57 @@ class SuperAdminController extends Controller
 
                 /*get Pharmacy by regID or pharmacy name and load all models*/
 
-                $pharmacy = Pharmacy::with(['branch'=>function($q){
+                $pharmacy = Pharmacy::with(['plan','users','branch'=>function($q){
                     $q->with(['user','sales','payment','drug','restock']);
                 }])->whereAny(['reg_ID','pharmacy_name'], $req['detail'])->get();
 
-                return response()->json(['message'=>'','data'=> ''],200);
+
+
+
+                $user = User::with('branch')->whereHas('branch.pharmacy',function ($q)use($req,$request){
+                    $q->whereAny(['reg_ID','pharmacy_name'], $req['detail']);
+                })->get();
+
+
+                return response()->json(['message'=>'pharmacy Fetched Successfully','data'=> ['user'=>$user,'pharmacy'=>$pharmacy]],200);
+
+            }catch (Exception $exception){
+                return response()->json(['message' => $exception->getMessage()]);
+            }
+    }
+    public function getPlan (Request $request){
+
+            $req = $request->all();
+
+            try {
+
+                /*get Pharmacy by regID or pharmacy name and load all models*/
+
+                $plan = Plan::where('plan_name','!=', 'trial')->get();
+
+
+
+
+                return response()->json(['message'=>'Plan Fetched Successfully','data'=> ['plan'=>$plan]],200);
+
+            }catch (Exception $exception){
+                return response()->json(['message' => $exception->getMessage()]);
+            }
+    }
+    public function getOnBoardingPlan (Request $request){
+
+            $req = $request->all();
+
+            try {
+
+                /*get Pharmacy by regID or pharmacy name and load all models*/
+
+                $plan = Plan::all();
+
+
+
+
+                return response()->json(['message'=>'Plan Fetched Successfully','data'=> ['plan'=>$plan]],200);
 
             }catch (Exception $exception){
                 return response()->json(['message' => $exception->getMessage()]);
@@ -178,11 +225,15 @@ class SuperAdminController extends Controller
 
             try {
 
-                $pharmacy = Pharmacy::where('id', $req['id'])->first();
+                $pharmacy = Pharmacy::with(['branch','user','plan'])->where('id', $req['id'])->first();
 
                 if (!$pharmacy){
                     return response()->json(['message'=>'No pharmacy Record Found'],200);
 
+                }
+
+                if ((count($pharmacy->branch)+1) > $pharmacy->plan->max_branch){
+                    return response()->json(['message'=>'Your Business has outgrown this Plan, Please upgrade to the next Plan'],200);
                 }
 
                 $payload = [

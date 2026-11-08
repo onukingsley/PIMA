@@ -3,7 +3,9 @@
 use App\Http\Controllers\AdminController;
 use App\Http\Controllers\AuthenticationController;
 use App\Http\Controllers\ManagerController;
+use App\Http\Controllers\PayStackController;
 use App\Http\Controllers\SalesController;
+use App\Http\Controllers\SuperAdminController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -51,4 +53,24 @@ Route::post('/adminEditPayment',[AdminController::class,'adminEditPayment']);
 Route::post('/adminUpdateDrugPrice',[AdminController::class,'updateDrugPrice']);
 Route::post('/adminNewDrugRequest',[AdminController::class,'adminNewDrugRequest']);
 Route::post('/adminAddDrugBatch',[AdminController::class,'adminAddDrugBatch']);
+
+/*payStack Controller*/
+
+Route::post('/initializeEnrollmentPayment',[PayStackController::class,'initializeEnrollmentPayment']);
+Route::post('/initializeSubscriptionPayment',[PayStackController::class,'initializeSubscriptionPayment']);
+Route::get('/enrollmentPaymentCallback',[PayStackController::class,'enrollmentPaymentCallback']);
+Route::get('/subscriptionPaymentCallback',[PayStackController::class,'subscriptionPaymentCallback']);
+
+
+/*super admin Dashboard*/
+
+Route::get('/getPharmacy', [SuperAdminController::class,'getPharmacy']);
+Route::get('/getPlan', [SuperAdminController::class,'getPlan']);
+Route::get('/getOnboardingPlan', [SuperAdminController::class,'getOnBoardingPlan']);
+Route::post('/createPharmacy', [SuperAdminController::class,'createPharmacy'])->middleware('auth:sanctum');
+Route::post('/addSubscription', [SuperAdminController::class,'addSubscription'])->middleware('auth:sanctum');
+Route::post('/addBranch', [SuperAdminController::class,'addBranch'])->middleware('auth:sanctum');
+Route::post('/deleteBranch', [SuperAdminController::class,'deleteBranch'])->middleware('auth:sanctum');
+Route::post('/editBranch', [SuperAdminController::class,'editBranch'])->middleware('auth:sanctum');
+Route::post('/editPharmacy', [SuperAdminController::class,'editPharmamcy'])->middleware('auth:sanctum');
 

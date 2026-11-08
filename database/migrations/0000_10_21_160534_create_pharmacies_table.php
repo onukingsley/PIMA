@@ -15,6 +15,8 @@ return new class extends Migration
             $table->id();
             $table->string('pharmacy_name');
             $table->string('subscription_name');
+            $table->foreignId('plan_id')->nullable()->constrained();
+            $table->string('subscription_amount');
             $table->string('PIMA_ID')->unique();
             $table->string('email')->unique();
             $table->string('phone_no')->unique();

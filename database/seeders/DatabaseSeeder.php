@@ -41,19 +41,107 @@ class DatabaseSeeder extends Seeder
         $branchIds = collect();
         $saleIds = collect();
         $labTestIds = collect();
+        $planIds = collect();
+
+
+        /*todo finish up the seed for plans*/
+        $plans = ['pima yanga','pima premium', 'pima banger', 'trial'];
+        $period = ['monthly','quarterly', 'half', 'yearly'];
+        $features = [
+            'trial' => [
+                'POS & barcode scanning',
+                'Receipt printing',
+                'Product catalog (100 items)',
+                'Customer records (50)',
+                'Daily sales report',
+                'Email support',
+            ],
+
+            'pima yanga' => [
+                'Everything in Trial',
+                'Held / parked sales',
+                'Returns & refunds',
+                'Basic discounts',
+                'Batch & expiry tracking',
+                'Low-stock alerts',
+                'Purchase orders & suppliers',
+                'Customer records (2,000)',
+                'Loyalty points',
+                'Prescription capture & dispensing labels',
+                'Profit & margin reports',
+                'Stock valuation',
+                'CSV / Excel export',
+                'Payment gateway (Paystack / Flutterwave)',
+            ],
+
+            'pima premium' => [
+                'Everything in Pima Yanga',
+                'Advanced discounts & promo codes',
+                'Stock transfers between branches',
+                'Multi-warehouse',
+                'Advanced role-based permissions',
+                'Shift management & cashier logs',
+                'Unlimited customer records',
+                'Credit / account sales',
+                'SMS & email campaigns',
+                'Controlled-drug register',
+                'Pharmacist verification workflow',
+                'Custom dashboards',
+                'Scheduled email reports',
+                'Accounting sync (QuickBooks / Xero)',
+                'Audit logs',
+                'Priority phone support',
+            ],
+
+            'pima banger' => [
+                'Everything in Pima Premium',
+                'Unlimited branches & users',
+                'Custom roles & permissions',
+                'Rules-engine discounts',
+                'API access',
+                'NAFDAC / regulatory reports',
+                'Dedicated account manager',
+                'SLA / uptime guarantee',
+                'Custom integrations on request',
+                'Onboarding & staff training',
+            ],
+        ];
+
+
+        for ($i = 0; $i < 10; $i++) {
+            $planPayload[] = [
+                'plan_name' => $plans[array_rand($plans)],
+                'period' => $period[array_rand($period)],
+                'feature'     => json_encode($features[array_rand($features)]),
+                'plan_amount' => fake()->numberBetween(10000, 200000),
+                'duration' => fake()->numberBetween(1, 24),
+                'max_branch' => fake()->numberBetween(1, 24),
+                'max_user' => fake()->numberBetween(1, 200),
+                'created_at' => Carbon::now()->subDays(rand(1, 180)),
+                'updated_at' => now(),
+            ];
+        }
+
+        DB::table('plans')->insert($planPayload);
+        $planIds = DB::table('plans')->pluck('id');
+        $this->command->info('plans seeded: ' . count($planPayload));
+
+
 
 
         /*Pharmacy Table*/
 
         $plans = ['pima yanga','pima premium', 'pima banger', 'trial'];
-        for ($i = 0; $i < 10; $i++) {
+        for ($i = 0; $i < 12; $i++) {
             $pharmacyPayload[] = [
                 'pharmacy_name' => fake()->name,
                 'email' => fake()->email,
                 'phone_no' => fake()->phoneNumber,
+                'subscription_amount' => fake()->numberBetween(10000, 200000),
                 'reg_ID' => $this->generateRegID("pharmacy", $i),
                 'subscription_name' => $plans[array_rand($plans)],
                 'PIMA_ID' => $this->generateRegID("pharmacy", $i),
+                'plan_id' => $planIds->random(),
                 'subscription_date' => now()->addMonths(rand(1, 10)),
                 'created_at' => Carbon::now()->subDays(rand(1, 180)),
                 'updated_at' => now(),
@@ -91,6 +179,7 @@ class DatabaseSeeder extends Seeder
                 'amount' => fake()->numberBetween(10000, 200000),
                 'duration' => fake()->numberBetween(1, 24),
                 'pharmacy_id' => $pharmacyIds->random(),
+                'plan_id' => $planIds->random(),
                 'expiring_date' => Carbon::now()->subDays(rand(10, 365)),
                 'created_at' => Carbon::now()->subDays(rand(1, 180)),
                 'updated_at' => now(),

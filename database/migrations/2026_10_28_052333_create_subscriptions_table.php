@@ -14,6 +14,7 @@ return new class extends Migration
         Schema::create('subscriptions', function (Blueprint $table) {
             $table->id();
             $table->foreignId('pharmacy_id')->constrained();
+            $table->foreignId('plan_id')->constrained();
             $table->string('subscription_name');
             $table->string('amount');
             $table->string('duration');

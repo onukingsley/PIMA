@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Pharmacy;
 use App\Models\User;
 use Exception;
 use Illuminate\Http\Request;
@@ -53,6 +54,20 @@ class AuthenticationController extends Controller
 
     public function register (Request $request){
         $req = $request->all();
+
+        $pharmacy_id = $request->user()->branch->pharmacy->id;
+
+        $pharmacy = Pharmacy::with(['branch','user','plan'])->where('id', $pharmacy_id)->first();
+
+        if (!$pharmacy){
+            return response()->json(['message'=>'No pharmacy Record Found'],200);
+
+        }
+
+        if ((count($pharmacy->user)+1) > $pharmacy->plan->max_user){
+            return response()->json(['message'=>'Your User record has outgrown this Plan, Please upgrade to the next Plan'],200);
+        }
+
 
         $idPrefix = [
             'sales'  => 'SID',
